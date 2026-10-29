@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101412">
+<title>¿Qué tacho?</title>
+<style>
+  :root {
+    --bg: #101412;
+    --panel: #1a201d;
+    --fg: #eef3ef;
+    --muted: #9aa8a0;
+    --accent: #5fd28b;
+    --tacho: #5f6b65;
+    --tacho-fg: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  }
+  header h1 { font-size: 1.15rem; margin: 0; letter-spacing: .01em; }
+  header small { color: var(--muted); font-size: .75rem; }
+
+  #visor { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #000; }
+  video, #foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #guia {
+    position: absolute; border: 4px solid var(--tacho); border-radius: 18px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
+    transition: border-color .2s;
+    pointer-events: none;
+  }
+  #top3 {
+    position: absolute; top: 10px; left: max(12px, env(safe-area-inset-left, 0px));
+    display: grid; gap: 4px; font-size: .78rem;
+    background: rgba(0,0,0,.45); padding: 8px 10px; border-radius: 10px; min-width: 150px;
+  }
+  .fila { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-variant-numeric: tabular-nums; }
+  .barra { grid-column: 1 / -1; height: 3px; background: rgba(255,255,255,.15); border-radius: 2px; }
+  .barra i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+
+  #inicio {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; text-align: center; padding: 24px; background: var(--bg);
+  }
+  #inicio p { color: var(--muted); max-width: 32ch; margin: 0; line-height: 1.45; }
+  .tachos { display: flex; gap: 6px; }
+  .tachos span { width: 22px; height: 30px; border-radius: 4px 4px 6px 6px; border: 1px solid rgba(255,255,255,.25); }
+
+  #resultado {
+    background: var(--tacho); color: var(--tacho-fg);
+    padding: 14px max(16px, env(safe-area-inset-right, 0px)) 14px max(16px, env(safe-area-inset-left, 0px));
+    transition: background .2s, color .2s;
+  }
+  #resultado .tipo { font-size: 1.35rem; font-weight: 700; }
+  #resultado .tacho { font-size: 1rem; font-weight: 600; margin-top: 2px; }
+  #resultado .ej { font-size: .85rem; opacity: .85; margin-top: 2px; }
+
+  .acciones {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 10px max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px));
+    background: var(--panel);
+  }
+  button, label.boton {
+    flex: 1 1 auto; font: inherit; font-weight: 600; font-size: .95rem;
+    padding: 12px 14px; border-radius: 12px; border: 0; cursor: pointer;
+    background: #2a332e; color: var(--fg); text-align: center;
+  }
+  button.principal { background: var(--accent); color: #0b1a10; }
+  button:focus-visible, label.boton:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .5; }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>¿Qué tacho?</h1>
+    <small id="estado">Cargando modelo…</small>
+  </div>
+</header>
+
+<div id="visor">
+  <video id="video" playsinline muted></video>
+  <img id="foto" alt="" hidden>
+  <div id="guia" hidden></div>
+  <div id="top3" hidden></div>
+  <div id="inicio">
+    <div class="tachos" aria-hidden="true">
+      <span style="background:#d62828"></span><span style="background:#7b4a2a"></span>
+      <span style="background:#2a9d4a"></span><span style="background:#f2c200"></span>
+      <span style="background:#1d6fd6"></span><span style="background:#f4f4f4"></span>
+      <span style="background:#1d1d1d"></span>
+    </div>
+    <p>Apunta la cámara a un residuo y te digo en qué tacho va. Pon un objeto a la vez dentro del recuadro.</p>
+    <button id="btnIniciar" class="principal" disabled>Cargando…</button>
+  </div>
+</div>
+
+<div id="resultado" aria-live="polite">
+  <div class="tipo" id="rTipo">—</div>
+  <div class="tacho" id="rTacho">Esperando imagen</div>
+  <div class="ej" id="rEj"></div>
+</div>
+
+<div class="acciones">
+  <button id="btnPausa" disabled>Pausar</button>
+  <button id="btnCambiar" disabled>Cambiar cámara</button>
+  <label class="boton" for="archivo">Usar una foto<input id="archivo" type="file" accept="image/*" capture="environment"></label>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.9.0/dist/tf-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@4.9.0/dist/tf-backend-cpu.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/tf-tflite.min.js"></script>
+<script>
+// Mismos datos que config.py
+const INFO = {
+  peligroso:       ["Residuo peligroso",       "ROJO",     "pilas, baterías, focos, medicamentos, aerosoles, jeringas", "#d62828", "#fff"],
+  biological:      ["Residuo orgánico",        "MARRÓN",   "restos de comida, cáscaras, hojas",                         "#7b4a2a", "#fff"],
+  glass:           ["Vidrio",                  "VERDE",    "botellas y frascos",                                        "#2a9d4a", "#fff"],
+  metal:           ["Metal",                   "AMARILLO", "latas, tapas, chatarra",                                    "#f2c200", "#1a1a1a"],
+  paper_cardboard: ["Papel / cartón",          "AZUL",     "hojas, periódicos, cajas",                                  "#1d6fd6", "#fff"],
+  plastic:         ["Plástico",                "BLANCO",   "botellas PET, envases, bolsas",                             "#f4f4f4", "#1a1a1a"],
+  trash:           ["Residuo no aprovechable", "NEGRO",    "papel higiénico, ropa, calzado, tecnopor sucio",            "#1d1d1d", "#fff"],
+};
+const UMBRAL = 0.60;       // debajo de esto, "no estoy seguro"
+const SUAVIZADO = 6;       // promedia las últimas N predicciones
+const LADO_GUIA = 0.7;     // el recuadro ocupa el 70 % del lado menor
+const INTERVALO_MS = 150;  // cada cuánto clasificar
+
+const $ = id => document.getElementById(id);
+const video = $("video"), guia = $("guia"), foto = $("foto");
+const lienzo = document.createElement("canvas");
+lienzo.width = lienzo.height = 224;
+const ctx = lienzo.getContext("2d", { willReadFrequently: true });
+
+let modelo, CLASES, stream, bucleActivo = false, pausado = false, usarTrasera = true, historial = [], ultimo = 0;
+
+async function cargar() {
+  try {
+    tflite.setWasmPath("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/wasm/");
+    CLASES = await (await fetch("clases.json")).json();
+    modelo = await tflite.loadTFLiteModel("modelo.tflite");
+    $("estado").textContent = "Modelo listo · funciona sin internet una vez cargado";
+    $("btnIniciar").textContent = "Abrir cámara";
+    $("btnIniciar").disabled = false;
+  } catch (e) {
+    $("estado").textContent = "No se pudo cargar el modelo: " + e.message;
+    $("btnIniciar").textContent = "Error al cargar";
+  }
+}
+
+async function abrirCamara() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: usarTrasera ? "environment" : "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+  } catch (e) {
+    $("estado").textContent = "No pude abrir la cámara (" + e.name + "). Puedes usar «Usar una foto».";
+    return;
+  }
+  video.srcObject = stream;
+  await video.play();
+  foto.hidden = true; video.hidden = false;
+  $("inicio").hidden = true; guia.hidden = false; $("top3").hidden = false;
+  $("btnPausa").disabled = false; $("btnCambiar").disabled = false;
+  pausado = false; $("btnPausa").textContent = "Pausar";
+  historial = [];
+  ubicarGuia();
+  if (!bucleActivo) { bucleActivo = true; requestAnimationFrame(bucle); }
+}
+
+// Recuadro en pantalla: cuadrado centrado
+function ubicarGuia() {
+  const v = $("visor").getBoundingClientRect();
+  const lado = Math.min(v.width, v.height) * LADO_GUIA;
+  Object.assign(guia.style, {
+    width: lado + "px", height: lado + "px",
+    left: (v.width - lado) / 2 + "px", top: (v.height - lado) / 2 + "px",
+  });
+}
+addEventListener("resize", ubicarGuia);
+
+// Recorta de la imagen original exactamente lo que se ve dentro del recuadro
+// (el video/foto se muestra con object-fit: cover)
+function recortar(fuente, fw, fh) {
+  const v = $("visor").getBoundingClientRect();
+  const escala = Math.max(v.width / fw, v.height / fh);
+  const ladoFuente = Math.min(v.width, v.height) * LADO_GUIA / escala;
+  const sx = (fw - ladoFuente) / 2, sy = (fh - ladoFuente) / 2;
+  ctx.drawImage(fuente, sx, sy, ladoFuente, ladoFuente, 0, 0, 224, 224);
+}
+
+function clasificar() {
+  const px = ctx.getImageData(0, 0, 224, 224).data;
+  const rgb = new Float32Array(224 * 224 * 3);
+  for (let i = 0, j = 0; i < px.length; i += 4) {
+    rgb[j++] = px[i]; rgb[j++] = px[i + 1]; rgb[j++] = px[i + 2];
+  }
+  const entrada = tf.tensor4d(rgb, [1, 224, 224, 3]);
+  const salida = modelo.predict(entrada);
+  const probs = Array.from(salida.dataSync());
+  entrada.dispose(); salida.dispose();
+  return probs;
+}
+
+function mostrar(probs) {
+  const orden = probs.map((p, i) => [p, i]).sort((a, b) => b[0] - a[0]);
+  $("top3").innerHTML = orden.slice(0, 3).map(([p, i]) =>
+    `<div class="fila"><span>${INFO[CLASES[i]][0]}</span><span>${Math.round(p * 100)}%</span>` +
+    `<div class="barra"><i style="width:${(p * 100).toFixed(1)}%"></i></div></div>`).join("");
+
+  const [conf, k] = orden[0];
+  const raiz = document.documentElement.style;
+  if (conf < UMBRAL) {
+    raiz.setProperty("--tacho", "#5f6b65"); raiz.setProperty("--tacho-fg", "#fff");
+    $("rTipo").textContent = "No estoy seguro…";
+    $("rTacho").textContent = "Acerca el objeto al recuadro o mejora la luz";
+    $("rEj").textContent = "";
+  } else {
+    const [nombre, tacho, ejemplos, color, texto] = INFO[CLASES[k]];
+    raiz.setProperty("--tacho", color); raiz.setProperty("--tacho-fg", texto);
+    $("rTipo").textContent = `${nombre} · ${Math.round(conf * 100)}%`;
+    $("rTacho").textContent = `Tacho ${tacho}`;
+    $("rEj").textContent = ejemplos;
+  }
+}
+
+function bucle(t) {
+  if (!pausado && video.readyState >= 2 && t - ultimo > INTERVALO_MS) {
+    ultimo = t;
+    recortar(video, video.videoWidth, video.videoHeight);
+    historial.push(clasificar());
+    if (historial.length > SUAVIZADO) historial.shift();
+    const media = historial[0].map((_, i) => historial.reduce((s, p) => s + p[i], 0) / historial.length);
+    mostrar(media);
+  }
+  if (stream && foto.hidden) requestAnimationFrame(bucle);
+  else bucleActivo = false;
+}
+
+$("btnIniciar").onclick = abrirCamara;
+$("btnPausa").onclick = () => {
+  pausado = !pausado;
+  $("btnPausa").textContent = pausado ? "Seguir" : "Pausar";
+  if (pausado) video.pause(); else video.play();
+};
+$("btnCambiar").onclick = () => { usarTrasera = !usarTrasera; abrirCamara(); };
+
+// Foto suelta (sirve también si el navegador no permite la cámara en vivo)
+$("archivo").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f || !modelo) return;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  foto.src = URL.createObjectURL(f);
+  await foto.decode();
+  foto.hidden = false; video.hidden = true;
+  $("inicio").hidden = true; guia.hidden = false; $("top3").hidden = false;
+  $("btnPausa").disabled = true;
+  $("btnCambiar").disabled = false; $("btnCambiar").textContent = "Volver a la cámara";
+  $("btnCambiar").onclick = () => {
+    $("btnCambiar").textContent = "Cambiar cámara";
+    $("btnCambiar").onclick = () => { usarTrasera = !usarTrasera; abrirCamara(); };
+    abrirCamara();
+  };
+  ubicarGuia();
+  recortar(foto, foto.naturalWidth, foto.naturalHeight);
+  mostrar(clasificar());
+  e.target.value = "";
+};
+
+cargar();
+</script>
+</body>
+</html>
