@@ -16,6 +16,7 @@
     --tacho-fg: #ffffff;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg); color: var(--fg);
@@ -38,6 +39,27 @@
     box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
     transition: border-color .2s;
     pointer-events: none;
+  }
+  #guia span {
+    position: absolute; left: 50%; top: -30px; transform: translateX(-50%);
+    white-space: nowrap; font-size: .8rem; font-weight: 600;
+    background: rgba(0,0,0,.55); padding: 3px 10px; border-radius: 999px;
+  }
+  #foco {
+    position: absolute; width: 74px; height: 74px; margin: -37px 0 0 -37px;
+    border: 2px solid #ffd84d; border-radius: 50%; pointer-events: none; opacity: 0;
+  }
+  #foco.activo { animation: foco .9s ease-out; }
+  @keyframes foco {
+    0% { transform: scale(1.5); opacity: 1; }
+    40% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { #foco.activo { animation-duration: .01s; } }
+  #ayuda {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    font-size: .75rem; color: #fff; background: rgba(0,0,0,.45);
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
   }
   #top3 {
     position: absolute; top: 10px; left: max(12px, env(safe-area-inset-left, 0px));
@@ -92,7 +114,9 @@
 <div id="visor">
   <video id="video" playsinline muted></video>
   <img id="foto" alt="" hidden>
-  <div id="guia" hidden></div>
+  <div id="guia" hidden><span>Pon el objeto aquí</span></div>
+  <div id="foco"></div>
+  <div id="ayuda" hidden>Toca la pantalla para enfocar</div>
   <div id="top3" hidden></div>
   <div id="inicio">
     <div class="tachos" aria-hidden="true">
@@ -175,6 +199,14 @@ async function abrirCamara() {
   foto.hidden = true; video.hidden = false;
   $("inicio").hidden = true; guia.hidden = false; $("top3").hidden = false;
   $("btnPausa").disabled = false; $("btnCambiar").disabled = false;
+  // Enfoque automático continuo, si la cámara lo permite
+  const pista = stream.getVideoTracks()[0];
+  const cap = pista.getCapabilities ? pista.getCapabilities() : {};
+  if ((cap.focusMode || []).includes("continuous")) {
+    pista.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+  }
+  $("ayuda").hidden = false;
+  setTimeout(() => { $("ayuda").hidden = true; }, 4000);
   pausado = false; $("btnPausa").textContent = "Pausar";
   historial = [];
   ubicarGuia();
@@ -249,6 +281,33 @@ function bucle(t) {
   if (stream && foto.hidden) requestAnimationFrame(bucle);
   else bucleActivo = false;
 }
+
+// Tocar para enfocar: muestra un círculo donde tocaste y, si la cámara
+// lo soporta (Chrome en Android), enfoca ese punto.
+$("visor").addEventListener("click", async e => {
+  if (!stream || !foto.hidden) return;
+  const v = $("visor").getBoundingClientRect();
+  const x = e.clientX - v.left, y = e.clientY - v.top;
+  const anillo = $("foco");
+  anillo.style.left = x + "px"; anillo.style.top = y + "px";
+  anillo.classList.remove("activo"); void anillo.offsetWidth; anillo.classList.add("activo");
+
+  const pista = stream.getVideoTracks()[0];
+  const cap = pista.getCapabilities ? pista.getCapabilities() : {};
+  if (!cap.focusMode) return;
+  // Punto tocado en coordenadas del video (0 a 1), considerando object-fit: cover
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const escala = Math.max(v.width / vw, v.height / vh);
+  const px = ((x - v.width / 2) / escala + vw / 2) / vw;
+  const py = ((y - v.height / 2) / escala + vh / 2) / vh;
+  const modo = cap.focusMode.includes("single-shot") ? "single-shot" : cap.focusMode[0];
+  try {
+    await pista.applyConstraints({ advanced: [{ pointsOfInterest: [{ x: px, y: py }], focusMode: modo }] });
+    if (cap.focusMode.includes("continuous")) {
+      setTimeout(() => pista.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {}), 2500);
+    }
+  } catch (_) { /* la cámara no permite elegir el punto de enfoque */ }
+});
 
 $("btnIniciar").onclick = abrirCamara;
 $("btnPausa").onclick = () => {
