@@ -45,6 +45,12 @@ Después abre `http://localhost:8000` en el navegador.
 
 También puedes usar la extensión **Live Server** de Visual Studio Code u otro servidor estático equivalente.
 
+## Aplicación desplegada
+
+La aplicación está disponible públicamente en GitHub Pages:
+
+<https://yessenia1.github.io/Trash-Classification/>
+
 ## Uso
 
 1. Abre la aplicación en el navegador.
